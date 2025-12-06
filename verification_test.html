@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GPS TEST MODE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@400;600;800&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --neon-green: #00ff9d;
+            --neon-red: #ff4d4d;
+            --dark-bg: #0f172a;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--dark-bg);
+            color: white;
+        }
+
+        .mono-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+
+<body class="h-screen w-screen flex flex-col p-4">
+
+    <!-- SIMULATION BANNER -->
+    <div
+        class="bg-yellow-500/20 text-yellow-300 text-center p-2 rounded-lg mb-4 text-xs font-bold border border-yellow-500/50">
+        ⚠ SIMULATION MODE: CYCLING CONTROL POINTS
+    </div>
+
+    <!-- Main Coordinates Panel -->
+    <div class="glass-panel rounded-2xl p-6 mb-4 flex-1 flex flex-col justify-center items-center relative text-center">
+        <div class="mb-6">
+            <div class="text-xs text-gray-500 mb-1">NORTHING</div>
+            <div id="val-north" class="mono-font text-5xl font-extrabold text-[#00ff9d]">-----</div>
+        </div>
+        <div class="mb-8">
+            <div class="text-xs text-gray-500 mb-1">EASTING</div>
+            <div id="val-east" class="mono-font text-5xl font-extrabold text-blue-400">-----</div>
+        </div>
+        <div class="flex justify-center items-center gap-2 text-gray-400 text-xs">
+            EXPECTED: <span id="val-expected" class="text-white">---</span>
+        </div>
+    </div>
+
+    <script>
+        // SIMULATION DATA (Control Points)
+        const POINTS = [
+            { name: "Point A", lat: 36.7646551, lon: -77.7148919, n: 9900, e: 19700 },
+            { name: "Point B", lat: 36.7638173, lon: -77.7151831, n: 9500, e: 19700 },
+            { name: "Point C", lat: 36.7636559, lon: -77.7128114, n: 9600, e: 20400 },
+            { name: "Point D", lat: 36.7650130, lon: -77.7124037, n: 10100, e: 20400 }
+        ];
+
+        // MATH
+        const REF_LAT = 36.764285325;
+        const REF_LON = -77.713822525;
+        const COEFF = { A: 291794, B: -91435, C: 46436, D: 383921, OFF_E: 20050, OFF_N: 9775 };
+
+        function gpsToGrid(lat, lon) {
+            const dLat = lat - REF_LAT;
+            const dLon = lon - REF_LON;
+            const east = (COEFF.A * dLon) + (COEFF.B * dLat) + COEFF.OFF_E;
+            const north = (COEFF.C * dLon) + (COEFF.D * dLat) + COEFF.OFF_N;
+            return { n: north, e: east };
+        }
+
+        // RUN LOOP
+        let idx = 0;
+        setInterval(() => {
+            const p = POINTS[idx];
+            const res = gpsToGrid(p.lat, p.lon);
+
+            document.getElementById('val-north').innerText = Math.round(res.n);
+            document.getElementById('val-east').innerText = Math.round(res.e);
+
+            const diffN = Math.round(res.n - p.n);
+            const diffE = Math.round(res.e - p.e);
+
+            document.getElementById('val-expected').innerHTML =
+                `[${p.name}] N:${p.n} E:${p.e} <br> ERROR: N${diffN} E${diffE}`;
+
+            idx = (idx + 1) % POINTS.length;
+        }, 2000); // Change every 2 seconds
+    </script>
+</body>
+
+</html>
