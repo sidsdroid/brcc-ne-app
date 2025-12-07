@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Power Station GPS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        /* Custom Styles for Premium Industrial Feel */
+        :root {
+            --neon-green: #00ff9d;
+            --neon-red: #ff4d4d;
+            --dark-bg: #0f172a;
+            --panel-bg: #1e293b;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--dark-bg);
+            color: white;
+            touch-action: manipulation; /* Disable double-tap zoom */
+        }
+        .mono-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .stat-value {
+            text-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+        }
+        /* Compass Dial Animation */
+        .compass-ring {
+            transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+        
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col p-4 relative">
+
+    <!-- Top Status Bar -->
+    <div class="flex justify-between items-center mb-4 text-xs font-semibold text-gray-400 tracking-wider">
+        <div class="flex items-center gap-2">
+            <div id="signal-dot" class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div>
+            <span id="signal-text">NO SIGNAL</span>
+        </div>
+        <div>
+            ACCURACY: <span id="accuracy-val" class="text-white">--</span> FT
+        </div>
+    </div>
+
+    <!-- Main Coordinates Panel -->
+    <div class="glass-panel rounded-2xl p-6 mb-4 flex-1 flex flex-col justify-center items-center relative overflow-hidden">
+        <!-- Background decorative grid -->
+        <div class="absolute inset-0 opacity-5" style="background-image: radial-gradient(#ffffff 2px, transparent 2px); background-size: 20px 20px;"></div>
+        
+        <div class="z-10 text-center w-full">
+            <h2 class="text-gray-400 text-sm tracking-[0.2em] uppercase mb-2">Current Location</h2>
+            
+            <div class="mb-6">
+                <div class="text-xs text-gray-500 mb-1">NORTHING</div>
+                <div id="val-north" class="mono-font text-5xl sm:text-6xl font-extrabold text-[#00ff9d] tracking-tighter">-----</div>
+            </div>
+            
+            <div class="mb-8">
+                <div class="text-xs text-gray-500 mb-1">EASTING</div>
+                <div id="val-east" class="mono-font text-5xl sm:text-6xl font-extrabold text-blue-400 tracking-tighter">-----</div>
+            </div>
+
+            <div class="flex justify-center items-end gap-2 text-gray-300">
+                <span class="text-sm pb-1">ELEV</span>
+                <span id="val-elev" class="mono-font text-2xl font-bold">---</span>
+                <span class="text-sm pb-1">FT</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation / Compass Panel -->
+    <div class="glass-panel rounded-2xl p-5 h-auto flex flex-col">
+        <!-- Input Toggle Header -->
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-gray-300 font-semibold flex items-center gap-2">
+                <span class="text-lg">🧭</span> Navigation
+            </h3>
+            <button onclick="toggleInput()" id="btn-input" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full transition-colors uppercase font-bold tracking-wide">
+                Set Target
+            </button>
+        </div>
+
+        <!-- Target Input Form (Hidden by default) -->
+        <div id="target-form" class="hidden mb-4 p-3 bg-black/20 rounded-xl space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-[10px] text-gray-500 mb-1">TARGET NORTH</label>
+                    <input type="number" id="inp-target-n" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white mono-font focus:border-blue-500 outline-none" placeholder="e.g. 9800">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-500 mb-1">TARGET EAST</label>
+                    <input type="number" id="inp-target-e" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white mono-font focus:border-blue-500 outline-none" placeholder="e.g. 19900">
+                </div>
+            </div>
+            <button onclick="setTarget()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded text-sm transition-colors">START TRACKING</button>
+        </div>
+
+        <!-- Compass & Distance View -->
+        <div class="flex items-center justify-between">
+            <!-- Compass Circle -->
+            <div class="relative w-24 h-24 sm:w-28 sm:h-28 flex-shrink-0 flex items-center justify-center bg-slate-800/50 rounded-full border border-slate-600 shadow-inner">
+                <!-- North Marker -->
+                <div class="absolute top-1 text-[10px] font-bold text-red-500">N</div>
+                
+                <!-- Rotating Arrow Implementation -->
+                <!-- The arrow itself rotates. 
+                     We apply rotation to this container based on (Bearing - Heading). -->
+                <div id="compass-arrow" class="w-full h-full absolute inset-0 transition-transform duration-300 ease-out" style="transform: rotate(0deg);">
+                    <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[30px] border-b-blue-500 absolute top-4 left-1/2 -translate-x-1/2 drop-shadow-[0_0_8px_rgba(59,130,246,0.6)]"></div>
+                </div>
+                
+                <!-- Center Dot -->
+                <div class="w-2 h-2 bg-white rounded-full z-10 box-shadow-glow"></div>
+            </div>
+
+            <!-- Stats -->
+            <div class="flex-1 pl-6 flex flex-col justify-center">
+                <div class="mb-3">
+                    <div class="text-[10px] text-gray-500 uppercase tracking-widest">Distance</div>
+                    <div class="flex items-baseline gap-1">
+                        <span id="dist-val" class="mono-font text-3xl font-bold text-white">---</span>
+                        <span class="text-sm text-gray-400">FT</span>
+                    </div>
+                </div>
+                <div>
+                     <div class="text-[10px] text-gray-500 uppercase tracking-widest">Bearing</div>
+                     <div class="flex items-baseline gap-1">
+                        <span id="bearing-val" class="mono-font text-xl font-bold text-white">---</span>
+                        <span class="text-xs text-gray-400">°</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- Configuration Constants (Derived from Analysis) ---
+    // User Location: Brunswick County Power Station, Freeman VA
+    // Reference Center (For projection)
+    const REF_LAT = 36.764285325;
+    const REF_LON = -77.713822525;
+
+    // Transformation Coefficients (GPS -> Plant Grid)
+    // Formula:
+    // dLat = Lat - REF_LAT
+    // dLon = Lon - REF_LON
+    // East  = (291794 * dLon) + (-91435 * dLat) + 20050
+    // North = (46436 * dLon)  + (383921 * dLat) + 9775
+    
+    const COEFF = {
+        A: 291794,
+        B: -91435,
+        C: 46436,
+        D: 383921,
+        OFF_E: 20050,
+        OFF_N: 9775
+    };
+
+    // --- State ---
+    let currentPos = { n: 0, e: 0, lat: 0, lon: 0 };
+    let targetPos = { n: null, e: null };
+    let currentHeading = 0; // Degrees (0 = North)
+
+    // --- DOM Elements ---
+    const elNorth = document.getElementById('val-north');
+    const elEast = document.getElementById('val-east');
+    const elElev = document.getElementById('val-elev');
+    const elAcc = document.getElementById('accuracy-val');
+    const elSigDot = document.getElementById('signal-dot');
+    const elSigText = document.getElementById('signal-text');
+    const elDist = document.getElementById('dist-val');
+    const elBear = document.getElementById('bearing-val');
+    const elArrow = document.getElementById('compass-arrow');
+    const elTargetForm = document.getElementById('target-form');
+
+    // --- Core Logic ---
+
+    function gpsToGrid(lat, lon) {
+        const dLat = lat - REF_LAT;
+        const dLon = lon - REF_LON; // Note: dLon might be handling 360 wrap in global cases, but locally this is fine.
+
+        const east = (COEFF.A * dLon) + (COEFF.B * dLat) + COEFF.OFF_E;
+        const north = (COEFF.C * dLon) + (COEFF.D * dLat) + COEFF.OFF_N;
+
+        return { n: north, e: east };
+    }
+
+    function updateDisplay(pos) {
+        // Update Coordinates
+        elNorth.innerText = Math.round(pos.n);
+        elEast.innerText = Math.round(pos.e);
+        
+        // Update Navigation if target set
+        if (targetPos.n !== null && targetPos.e !== null) {
+            updateNavigation();
+        }
+    }
+
+    function updateNavigation() {
+        const dN = targetPos.n - currentPos.n;
+        const dE = targetPos.e - currentPos.e;
+        
+        // Distance (Feet are the native unit of the grid)
+        const dist = Math.sqrt(dN*dN + dE*dE);
+        elDist.innerText = Math.round(dist);
+
+        // Bearing to Target (0 = North, 90 = East)
+        // atan2(y, x) -> returns angle from X axis.
+        // We want angle from North (Y axis).
+        // Standard Math: 0 is East. Grid North is Y.
+        // Vector is (dE, dN).
+        // Angle from North Clockwise: atan2(dE, dN)
+        let bearingRad = Math.atan2(dE, dN);
+        let bearingDeg = bearingRad * (180 / Math.PI);
+        if (bearingDeg < 0) bearingDeg += 360;
+
+        elBear.innerText = Math.round(bearingDeg);
+
+        // Update Arrow Rotation
+        // Arrow should point to Target relative to device heading.
+        // Rotation = Bearing - Heading
+        let arrowRot = bearingDeg - currentHeading;
+        elArrow.style.transform = `rotate(${arrowRot}deg)`;
+    }
+
+    // --- Geolocation ---
+
+    function handlePosition(position) {
+        const coords = position.coords;
+        const lat = coords.latitude;
+        const lon = coords.longitude;
+        const acc = coords.accuracy * 3.28084; // Convert meters to feet
+        const alt = coords.altitude ? coords.altitude * 3.28084 : 0; // meters to feet
+
+        // Convert
+        const grid = gpsToGrid(lat, lon);
+        
+        // State Update
+        currentPos = {
+            n: grid.n,
+            e: grid.e,
+            lat: lat,
+            lon: lon
+        };
+
+        // UI Updates
+        elAcc.innerText = Math.round(acc);
+        elElev.innerText = coords.altitude ? Math.round(alt) : '---';
+        
+        // Signal Strength Logic
+        if (acc < 20) {
+            elSigDot.className = "w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]";
+            elSigText.innerText = "STRONG SIGNAL";
+            elSigText.className = "text-green-400";
+        } else if (acc < 50) {
+            elSigDot.className = "w-2.5 h-2.5 rounded-full bg-yellow-500";
+            elSigText.innerText = "MODERATE";
+            elSigText.className = "text-yellow-400";
+        } else {
+            elSigDot.className = "w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse";
+            elSigText.innerText = "WEAK SIGNAL";
+            elSigText.className = "text-red-400";
+        }
+
+        // Heading Update (GPS Course if moving)
+        if (coords.speed && coords.speed > 1) { // moving faster than ~2mph
+             // Use GPS heading if available and moving
+             if (coords.heading !== null && !isNaN(coords.heading)) {
+                 currentHeading = coords.heading;
+             }
+        }
+
+        updateDisplay(currentPos);
+    }
+
+    function handleError(err) {
+        console.warn('ERROR(' + err.code + '): ' + err.message);
+        elSigText.innerText = "GPS ERROR";
+        elSigDot.className = "w-2.5 h-2.5 rounded-full bg-red-600";
+    }
+
+    const geoOptions = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+    };
+
+    // --- Device Orientation (Compass) ---
+    // Note: iOS requires permission request for this now, Android usually usually fine on https
+    
+    function initCompass() {
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', function(event) {
+                // webkitCompassHeading for iOS, alpha for Android (rough approx)
+                if (event.webkitCompassHeading) {
+                    currentHeading = event.webkitCompassHeading;
+                } else if (event.alpha) {
+                     // Android 'alpha' is counter-clockwise and 0 is NOT north by default necessarily depending on absolute prop
+                     // This is a comprehensive fallback attempt
+                     if (event.absolute) {
+                         currentHeading = 360 - event.alpha;
+                     } else {
+                         // Relative orientation, not much we can do without absolute
+                         currentHeading = 360 - event.alpha; 
+                     }
+                }
+                
+                // Refresh nav if we have target
+                if (targetPos.n !== null) {
+                    updateNavigation();
+                }
+            });
+        }
+    }
+
+    // --- UI Interactions ---
+
+    window.toggleInput = function() {
+        elTargetForm.classList.toggle('hidden');
+    };
+
+    window.setTarget = function() {
+        const n = parseFloat(document.getElementById('inp-target-n').value);
+        const e = parseFloat(document.getElementById('inp-target-e').value);
+        
+        if (!isNaN(n) && !isNaN(e)) {
+            targetPos = { n: n, e: e };
+            toggleInput();
+            
+            // Check if we have current pos to run update immediately
+            if (currentPos.n !== 0) {
+                updateNavigation();
+            }
+        } else {
+            alert("Please enter valid numeric coordinates");
+        }
+    }
+
+    // --- Init ---
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(handlePosition, handleError, geoOptions);
+    } else {
+        alert("Geolocation is not supported by this browser.");
+    }
+    initCompass();
+
+</script>
+</body>
+</html>
